@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAllergy } from "../context/AllergyContext";
+import { productHasAllergens } from "../utils/allergens";
 import ProductCard from "../components/ProductCard";
 import { foodApi } from "../services/api";
+import { addRecentProduct } from "../utils/recentProducts";
 
 export default function BarcodeFlow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { allergens, hasAllergens } = useAllergy();
   const [barcode, setBarcode] = useState(searchParams.get("q") || "");
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -26,6 +30,7 @@ export default function BarcodeFlow() {
     try {
       const res = await foodApi.getProductByBarcode(code);
       setProduct(res.data);
+      addRecentProduct(res.data);
     } catch (err) {
       setError(err.response?.data?.error || "Produit introuvable.");
     } finally {
@@ -39,10 +44,19 @@ export default function BarcodeFlow() {
   };
 
   const handleSubstitute = async () => {
+    if (product && hasAllergens && productHasAllergens(product.allergens, allergens)) {
+      const proceed = window.confirm(
+        "Ce produit contient un de vos allergènes. Chercher un substitut sans ces allergènes ?",
+      );
+      if (!proceed) return;
+    }
     setLoading(true);
     setError("");
     try {
-      const res = await foodApi.findSubstitute(barcode.trim());
+      const res = await foodApi.findSubstitute(barcode.trim(), {
+        avoidAllergens: hasAllergens,
+        userAllergens: allergens,
+      });
       navigate("/result", { state: { result: res.data } });
     } catch (err) {
       setError(err.response?.data?.error || "Aucun substitut trouvé.");
@@ -80,16 +94,27 @@ export default function BarcodeFlow() {
       {product && (
         <div>
           <div style={{ maxWidth: 280, margin: "0 auto 1rem" }}>
-            <ProductCard product={product} />
+            <ProductCard product={product} userAllergens={allergens} />
           </div>
           <div className="page-actions" style={{ justifyContent: "center" }}>
+            <Link
+              to={`/product/${product.barcode}`}
+              className="btn btn-secondary"
+              style={{ textDecoration: "none" }}
+            >
+              Voir la fiche complète
+            </Link>
             <button
               type="button"
               className="btn btn-primary"
               onClick={handleSubstitute}
               disabled={loading}
             >
-              {loading ? "Recherche…" : "Proposer un substitut plus sain"}
+              {loading
+                ? "Recherche…"
+                : hasAllergens
+                  ? "Substitut sans mes allergènes"
+                  : "Proposer un substitut plus sain"}
             </button>
           </div>
         </div>

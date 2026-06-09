@@ -44,7 +44,8 @@ export default function Layout() {
 
           <nav className="header-nav">
             <Link to="/">Découvrir</Link>
-            <Link to="/register">Contribuer</Link>
+            <Link to="/contribuer">Contribuer</Link>
+            <Link to="/barcode">Code-barres</Link>
             {user ? (
               <div className="user-menu">
                 <Link to="/substitutions">Mes substituts</Link>

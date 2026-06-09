@@ -60,6 +60,11 @@ class CategoryProductsSerializer(serializers.Serializer):
 class SubstituteRequestSerializer(serializers.Serializer):
     barcode = serializers.CharField(required=False, allow_blank=True)
     avoid_allergens = serializers.BooleanField(default=True, required=False)
+    user_allergens = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+    )
 
     def validate_barcode(self, value):
         if not value:
@@ -67,6 +72,21 @@ class SubstituteRequestSerializer(serializers.Serializer):
         cleaned = value.strip().replace(" ", "")
         if not BARCODE_REGEX.match(cleaned):
             raise serializers.ValidationError("Code-barres invalide.")
+        return cleaned
+
+
+class UserAllergensSerializer(serializers.Serializer):
+    allergens = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+
+    def validate_allergens(self, value):
+        from api.allergens import VALID_ALLERGEN_KEYS
+
+        cleaned = []
+        for key in value:
+            if key not in VALID_ALLERGEN_KEYS:
+                raise serializers.ValidationError(f"Allergène inconnu : {key}")
+            if key not in cleaned:
+                cleaned.append(key)
         return cleaned
 
 

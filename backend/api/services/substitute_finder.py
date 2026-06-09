@@ -1,5 +1,6 @@
 from typing import Any
 
+from api.allergens import product_has_allergens
 from api.services.data_cleaner import DataCleaner
 from api.services.off_client import OpenFoodFactsClient
 from api.services.repository import ProductRepository
@@ -23,6 +24,7 @@ class SubstituteFinder:
         barcode: str | None = None,
         product_data: dict[str, Any] | None = None,
         avoid_allergens: bool = True,
+        user_allergens: list[str] | None = None,
     ) -> dict[str, Any]:
         original = self._resolve_original(barcode, product_data)
         if not original:
@@ -56,28 +58,50 @@ class SubstituteFinder:
         cleaned_candidates = [DataCleaner.clean_product(p) for p in candidates_raw]
         cleaned_candidates = [c for c in cleaned_candidates if c["barcode"]]
 
-        if avoid_allergens and original.get("allergens"):
-            original_allergens = {a.lower() for a in original["allergens"]}
+        forbidden_keys = list(user_allergens or [])
+        if avoid_allergens and forbidden_keys:
             filtered = [
                 c
                 for c in cleaned_candidates
-                if not original_allergens.intersection({a.lower() for a in c.get("allergens", [])})
+                if not product_has_allergens(c.get("allergens", []), forbidden_keys)
             ]
             if filtered:
                 cleaned_candidates = filtered
 
         substitute = self._pick_best(cleaned_candidates, original)
         if not substitute:
+            msg = "Aucun substitut plus sain trouvé dans cette catégorie."
+            if forbidden_keys and avoid_allergens:
+                msg = (
+                    "Aucun substitut plus sain trouvé sans vos allergènes "
+                    "déclarés dans cette catégorie."
+                )
             return {
                 "success": False,
-                "error": "Aucun substitut plus sain trouvé dans cette catégorie.",
-                "original": original,
+                "error": msg,
+                "original": self._to_response(original),
             }
 
-        self.repository.upsert_product(original)
-        self.repository.upsert_product(substitute)
+        top_candidates = self._pick_top(cleaned_candidates, original, limit=3)
+        alternative_barcodes = {substitute["barcode"]}
+        alternatives = []
+        for candidate in top_candidates:
+            if candidate["barcode"] in alternative_barcodes:
+                continue
+            alternative_barcodes.add(candidate["barcode"])
+            alternatives.append(
+                {
+                    **self._to_response(candidate),
+                    "description": self._build_description(candidate, original),
+                }
+            )
+            if len(alternatives) >= 2:
+                break
 
-        reason = self._build_reason(original, substitute)
+        for product in [original, substitute, *top_candidates]:
+            self.repository.upsert_product(product)
+
+        reason = self._build_reason(original, substitute, forbidden_keys if avoid_allergens else [])
 
         return {
             "success": True,
@@ -87,6 +111,12 @@ class SubstituteFinder:
                 "description": self._build_description(substitute, original),
             },
             "reason": reason,
+            "allergy_safe": bool(
+                forbidden_keys
+                and not product_has_allergens(substitute.get("allergens", []), forbidden_keys)
+            ),
+            "alternatives": alternatives,
+            "improvement": self._compute_improvement(original, substitute),
         }
 
     def _resolve_original(
@@ -131,7 +161,41 @@ class SubstituteFinder:
         pool = better if better else candidates
         return min(pool, key=score)
 
-    def _build_reason(self, original: dict, substitute: dict) -> str:
+    def _pick_top(
+        self,
+        candidates: list[dict[str, Any]],
+        original: dict[str, Any],
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        if not candidates:
+            return []
+
+        original_rank = NUTRI_RANK.get(original.get("nutri_score") or "E", 5)
+
+        def score(candidate: dict[str, Any]) -> tuple:
+            nutri = NUTRI_RANK.get(candidate.get("nutri_score") or "E", 5)
+            has_stores = 0 if candidate.get("stores") else 1
+            has_image = 0 if candidate.get("image_url") else 1
+            return (nutri, has_stores, has_image)
+
+        better = [c for c in candidates if score(c)[0] < original_rank]
+        pool = better if better else candidates
+        return sorted(pool, key=score)[:limit]
+
+    def _compute_improvement(self, original: dict, substitute: dict) -> dict:
+        orig_rank = NUTRI_RANK.get((original.get("nutri_score") or "E").upper(), 5)
+        sub_rank = NUTRI_RANK.get((substitute.get("nutri_score") or "E").upper(), 5)
+        nova_delta = None
+        if original.get("nova_group") and substitute.get("nova_group"):
+            nova_delta = original["nova_group"] - substitute["nova_group"]
+        return {
+            "nutri_score_before": original.get("nutri_score"),
+            "nutri_score_after": substitute.get("nutri_score"),
+            "nutri_steps": max(0, orig_rank - sub_rank),
+            "nova_delta": nova_delta,
+        }
+
+    def _build_reason(self, original: dict, substitute: dict, user_allergens: list[str]) -> str:
         orig_score = original.get("nutri_score") or "?"
         sub_score = substitute.get("nutri_score") or "?"
         parts = [
@@ -143,10 +207,10 @@ class SubstituteFinder:
                     f"Niveau NOVA plus faible ({original['nova_group']} → {substitute['nova_group']}), "
                     "donc moins ultra-transformé."
                 )
-        if original.get("allergens") and not set(substitute.get("allergens", [])).intersection(
-            set(original["allergens"])
+        if user_allergens and not product_has_allergens(
+            substitute.get("allergens", []), user_allergens
         ):
-            parts.append("Sans les mêmes allergènes que le produit d'origine.")
+            parts.append("Compatible avec vos allergènes déclarés.")
         return " ".join(parts)
 
     def _build_description(self, substitute: dict, original: dict) -> str:
@@ -170,9 +234,12 @@ class SubstituteFinder:
             "name": product.get("name"),
             "brand": product.get("brand"),
             "category_name": product.get("category_name"),
+            "category_tag": product.get("category_tag"),
             "nutri_score": product.get("nutri_score"),
+            "ecoscore_grade": product.get("ecoscore_grade"),
             "nova_group": product.get("nova_group"),
             "allergens": product.get("allergens", []),
+            "ingredients_text": product.get("ingredients_text"),
             "image_url": product.get("image_url"),
             "off_url": product.get("off_url"),
             "stores": product.get("stores", []),

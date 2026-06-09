@@ -72,6 +72,7 @@ class ProductRepository:
             substitute_stores=substitute.get("stores", []),
             substitute_off_url=substitute.get("off_url", ""),
             substitute_nutri_score=substitute.get("nutri_score"),
+            original_nutri_score=original.get("nutri_score"),
             reason=reason,
         ).save()
 

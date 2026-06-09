@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useAllergy } from "../context/AllergyContext";
+import { filterProductsByAllergens, productHasAllergens } from "../utils/allergens";
+import { getRecentProducts } from "../utils/recentProducts";
 import { foodApi } from "../services/api";
+import AllergyBar from "./AllergyBar";
 import PreferencesBar from "./PreferencesBar";
 import ProductGrid from "./ProductGrid";
+import RecentProducts from "./RecentProducts";
 import SearchToolbar from "./SearchToolbar";
 
 const DEFAULT_CATEGORY = "en:biscuits";
@@ -11,6 +16,7 @@ const NUTRI_RANK = { A: 1, B: 2, C: 3, D: 4, E: 5 };
 export default function BrowseProducts() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { allergens, filterEnabled, hasAllergens } = useAllergy();
   const query = searchParams.get("q") || "";
   const categoryParam = searchParams.get("category") || "";
 
@@ -22,6 +28,7 @@ export default function BrowseProducts() {
   const [sortHealthy, setSortHealthy] = useState(false);
   const [sortOrder, setSortOrder] = useState("asc");
   const [error, setError] = useState("");
+  const [recentProducts, setRecentProducts] = useState(() => getRecentProducts());
 
   useEffect(() => {
     foodApi
@@ -59,8 +66,15 @@ export default function BrowseProducts() {
       .finally(() => setLoading(false));
   }, [activeTag, query]);
 
+  useEffect(() => {
+    setRecentProducts(getRecentProducts());
+  }, [products]);
+
   const displayedProducts = useMemo(() => {
     let list = [...(Array.isArray(products) ? products : [])];
+    if (filterEnabled && hasAllergens) {
+      list = filterProductsByAllergens(list, allergens);
+    }
     if (sortHealthy || sortOrder) {
       list.sort((a, b) => {
         const na = NUTRI_RANK[a.nutri_score?.toUpperCase()] || 99;
@@ -69,14 +83,23 @@ export default function BrowseProducts() {
       });
     }
     return list;
-  }, [products, sortHealthy, sortOrder]);
+  }, [products, sortHealthy, sortOrder, filterEnabled, hasAllergens, allergens]);
 
   const handleSubstitute = async () => {
     if (!selectedProduct) return;
+    if (hasAllergens && productHasAllergens(selectedProduct.allergens, allergens)) {
+      const proceed = window.confirm(
+        "Ce produit contient un de vos allergènes. Voulez-vous quand même chercher un substitut sans ces allergènes ?",
+      );
+      if (!proceed) return;
+    }
     setLoading(true);
     setError("");
     try {
-      const res = await foodApi.findSubstitute(selectedProduct.barcode);
+      const res = await foodApi.findSubstitute(selectedProduct.barcode, {
+        avoidAllergens: hasAllergens,
+        userAllergens: allergens,
+      });
       navigate("/result", { state: { result: res.data } });
     } catch (err) {
       setError(err.response?.data?.error || "Aucun substitut trouvé.");
@@ -101,6 +124,10 @@ export default function BrowseProducts() {
         }}
       />
 
+      <AllergyBar />
+
+      <RecentProducts products={recentProducts} />
+
       <PreferencesBar
         productCount={displayedProducts.length}
         onSortByPreferences={setSortHealthy}
@@ -119,10 +146,18 @@ export default function BrowseProducts() {
         selectedBarcode={selectedProduct?.barcode}
         onSelect={setSelectedProduct}
         loading={loading && !products.length}
+        userAllergens={allergens}
       />
 
       {selectedProduct && (
         <div className="sticky-action-bar">
+          <Link
+            to={`/product/${selectedProduct.barcode}`}
+            className="btn btn-secondary"
+            style={{ textDecoration: "none" }}
+          >
+            Voir la fiche
+          </Link>
           <button
             type="button"
             className="btn btn-primary"
@@ -131,7 +166,9 @@ export default function BrowseProducts() {
           >
             {loading
               ? "Recherche du substitut…"
-              : `Trouver un substitut pour « ${selectedProduct.name} »`}
+              : hasAllergens
+                ? `Substitut sans vos allergènes pour « ${selectedProduct.name} »`
+                : `Trouver un substitut pour « ${selectedProduct.name} »`}
           </button>
         </div>
       )}

@@ -6,6 +6,8 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import CategoryFlow from "./pages/CategoryFlow";
 import BarcodeFlow from "./pages/BarcodeFlow";
+import Contribute from "./pages/Contribute";
+import ProductDetail from "./pages/ProductDetail";
 import MySubstitutions from "./pages/MySubstitutions";
 import SubstituteResult from "./pages/SubstituteResult";
 
@@ -31,6 +33,8 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="categories" element={<CategoryFlow />} />
         <Route path="barcode" element={<BarcodeFlow />} />
+        <Route path="product/:barcode" element={<ProductDetail />} />
+        <Route path="contribuer" element={<Contribute />} />
         <Route path="result" element={<SubstituteResult />} />
         <Route
           path="substitutions"
