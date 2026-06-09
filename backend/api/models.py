@@ -16,6 +16,7 @@ class User(Document):
     password_hash = StringField(required=True)
     first_name = StringField(max_length=100)
     last_name = StringField(max_length=100)
+    allergens = ListField(StringField(), default=list)
     created_at = DateTimeField(default=datetime.utcnow)
 
     @property
@@ -74,6 +75,7 @@ class Substitution(Document):
     substitute_stores = ListField(StringField())
     substitute_off_url = StringField()
     substitute_nutri_score = StringField()
+    original_nutri_score = StringField()
     reason = StringField()
     saved_at = DateTimeField(default=datetime.utcnow)
 

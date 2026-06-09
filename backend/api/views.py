@@ -13,6 +13,7 @@ from api.serializers import (
     SaveSubstitutionSerializer,
     SearchProductsSerializer,
     SubstituteRequestSerializer,
+    UserAllergensSerializer,
 )
 from api.services import (
     DataCleaner,
@@ -47,12 +48,7 @@ class RegisterView(APIView):
         return Response(
             {
                 "token": token,
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                },
+                "user": _user_response(user),
             },
             status=status.HTTP_201_CREATED,
         )
@@ -77,12 +73,7 @@ class LoginView(APIView):
         return Response(
             {
                 "token": token,
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                },
+                "user": _user_response(user),
             }
         )
 
@@ -91,14 +82,24 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user
+        return Response(_user_response(request.user))
+
+    def patch(self, request):
+        serializer = UserAllergensSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request.user.allergens = serializer.validated_data["allergens"]
+        request.user.save()
+        return Response(_user_response(request.user))
+
+
+class AllergensView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from api.allergens import COMMON_ALLERGENS
+
         return Response(
-            {
-                "id": str(user.id),
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-            }
+            [{"key": a["key"], "label_fr": a["label_fr"]} for a in COMMON_ALLERGENS]
         )
 
 
@@ -205,9 +206,20 @@ class SubstituteView(APIView):
         data = serializer.validated_data
 
         finder = SubstituteFinder()
+        user_allergens = data.get("user_allergens") or []
+        if (
+            hasattr(request, "user")
+            and request.user
+            and getattr(request.user, "is_authenticated", False)
+            and not getattr(request.user, "is_anonymous", True)
+        ):
+            if not user_allergens:
+                user_allergens = getattr(request.user, "allergens", None) or []
+
         result = finder.find_substitute(
             barcode=data.get("barcode"),
             avoid_allergens=data.get("avoid_allergens", True),
+            user_allergens=user_allergens,
         )
 
         if not result.get("success"):
@@ -234,9 +246,11 @@ class SaveSubstitutionView(APIView):
             )
 
         finder = SubstituteFinder()
+        user_allergens = getattr(request.user, "allergens", None) or []
         reason = data.get("reason") or finder._build_reason(
             _product_dict(original),
             _product_dict(substitute),
+            user_allergens,
         )
 
         sub = repo.save_substitution(
@@ -285,6 +299,16 @@ class HealthView(APIView):
         return Response({"status": "ok"})
 
 
+def _user_response(user) -> dict:
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "allergens": getattr(user, "allergens", None) or [],
+    }
+
+
 def _product_dict(product) -> dict:
     return {
         "barcode": product.barcode,
@@ -315,6 +339,7 @@ def _product_response(product) -> dict:
         "ecoscore_grade": product.ecoscore_grade,
         "nova_group": product.nova_group,
         "allergens": product.allergens,
+        "ingredients_text": product.ingredients_text,
         "image_url": product.image_url,
         "off_url": product.off_url,
         "stores": product.stores,
@@ -333,6 +358,7 @@ def _substitution_response(sub) -> dict:
         "substitute_stores": sub.substitute_stores,
         "substitute_off_url": sub.substitute_off_url,
         "substitute_nutri_score": sub.substitute_nutri_score,
+        "original_nutri_score": getattr(sub, "original_nutri_score", None),
         "reason": sub.reason,
         "saved_at": sub.saved_at.isoformat() if sub.saved_at else None,
     }

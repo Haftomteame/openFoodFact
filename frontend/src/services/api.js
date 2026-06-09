@@ -38,6 +38,7 @@ export const authApi = {
   register: (data) => api.post("/auth/register/", data),
   login: (data) => api.post("/auth/login/", data),
   me: () => api.get("/auth/me/"),
+  updateAllergens: (allergens) => api.patch("/auth/me/", { allergens }),
 };
 
 export const foodApi = {
@@ -49,8 +50,12 @@ export const foodApi = {
   searchProducts: (q, pageSize = 24) =>
     api.get("/search/", { params: { q, page_size: pageSize } }),
   getProductByBarcode: (barcode) => api.get(`/products/${barcode}/`),
-  findSubstitute: (barcode, avoidAllergens = true) =>
-    api.post("/substitute/", { barcode, avoid_allergens: avoidAllergens }),
+  findSubstitute: (barcode, { avoidAllergens = true, userAllergens = [] } = {}) =>
+    api.post("/substitute/", {
+      barcode,
+      avoid_allergens: avoidAllergens,
+      user_allergens: userAllergens,
+    }),
   saveSubstitution: (originalBarcode, substituteBarcode, reason = "") =>
     api.post("/substitutions/save/", {
       original_barcode: originalBarcode,

@@ -1,13 +1,15 @@
 import ProductCard from "./ProductCard";
 
-export default function ProductGrid({ products, selectedBarcode, onSelect, loading }) {
+export default function ProductGrid({ products, selectedBarcode, onSelect, loading, userAllergens }) {
   if (loading) {
     return <p className="loading-text">Chargement des produits…</p>;
   }
 
   if (!products?.length) {
     return (
-      <p className="loading-text">Aucun produit trouvé dans cette catégorie.</p>
+      <p className="loading-text">
+        Aucun produit trouvé{userAllergens?.length ? " (filtre allergies actif)" : ""}.
+      </p>
     );
   }
 
@@ -19,6 +21,7 @@ export default function ProductGrid({ products, selectedBarcode, onSelect, loadi
           product={product}
           selected={selectedBarcode === product.barcode}
           onSelect={onSelect}
+          userAllergens={userAllergens}
         />
       ))}
     </div>
