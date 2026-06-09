@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+
+# Django
+backend/staticfiles/
+*.sqlite3
+db.sqlite3
+
+# Node
+node_modules/
+frontend/dist/
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
