@@ -1,9 +1,30 @@
 import axios from "axios";
 
+const apiBaseUrl = import.meta.env.VITE_API_URL || "/api";
+
+if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
+  console.error(
+    "VITE_API_URL manquant : le frontend appelle /api sur Vercel au lieu du backend Render.",
+  );
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
+  baseURL: apiBaseUrl,
   headers: { "Content-Type": "application/json" },
 });
+
+api.interceptors.response.use(
+  (response) => {
+    const contentType = response.headers["content-type"] || "";
+    if (!contentType.includes("application/json")) {
+      return Promise.reject(
+        new Error("Réponse non-JSON (backend non configuré ou URL API incorrecte)."),
+      );
+    }
+    return response;
+  },
+  (error) => Promise.reject(error),
+);
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");

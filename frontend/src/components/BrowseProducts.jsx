@@ -26,8 +26,12 @@ export default function BrowseProducts() {
   useEffect(() => {
     foodApi
       .getCategories()
-      .then((res) => setCategories(res.data))
-      .catch(() => setError("Impossible de charger les catégories."));
+      .then((res) => setCategories(Array.isArray(res.data) ? res.data : []))
+      .catch(() =>
+        setError(
+          "Impossible de charger les catégories. Vérifiez VITE_API_URL sur Vercel (URL du backend Render).",
+        ),
+      );
   }, []);
 
   useEffect(() => {
@@ -44,13 +48,19 @@ export default function BrowseProducts() {
       : foodApi.getCategoryProducts(activeTag);
 
     load
-      .then((res) => setProducts(res.data.products))
-      .catch(() => setError("Impossible de charger les produits."))
+      .then((res) =>
+        setProducts(Array.isArray(res.data?.products) ? res.data.products : []),
+      )
+      .catch(() =>
+        setError(
+          "Impossible de charger les produits. Vérifiez VITE_API_URL sur Vercel (URL du backend Render).",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [activeTag, query]);
 
   const displayedProducts = useMemo(() => {
-    let list = [...products];
+    let list = [...(Array.isArray(products) ? products : [])];
     if (sortHealthy || sortOrder) {
       list.sort((a, b) => {
         const na = NUTRI_RANK[a.nutri_score?.toUpperCase()] || 99;

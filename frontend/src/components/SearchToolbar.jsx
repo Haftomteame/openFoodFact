@@ -33,7 +33,7 @@ export default function SearchToolbar({
             aria-label="Explorer les produits par catégorie"
           >
             <option value="">Explorer les produits par…</option>
-            {categories.map((cat) => (
+            {(Array.isArray(categories) ? categories : []).map((cat) => (
               <option key={cat.tag} value={cat.tag}>
                 {cat.name_fr}
               </option>
