@@ -141,29 +141,15 @@ MONGODB_DB=pur_beurre
 | GET | `/api/substitutions/` | Mes substituts |
 | DELETE | `/api/substitutions/<id>/` | Supprimer un substitut |
 
-## Déploiement (Heroku / Render)
+## Déploiement (accessible partout)
 
-### Backend
+Guide pas à pas : **[DEPLOYMENT.md](./DEPLOYMENT.md)**
 
-```bash
-cd backend
-heroku create pur-beurre-ratatouille
-heroku config:set SECRET_KEY=... JWT_SECRET_KEY=... MONGODB_URI=... DEBUG=False
-heroku config:set ALLOWED_HOSTS=.herokuapp.com CORS_ALLOWED_ORIGINS=https://votre-frontend.vercel.app
-git push heroku main
-```
+Résumé : **MongoDB Atlas** (base) + **Render** (API Django) + **Vercel** (frontend React).
 
-Le `Procfile` utilise Gunicorn. Définissez `runtime.txt` pour Python 3.11.
-
-### Frontend
-
-```bash
-cd frontend
-npm run build
-# Déployez le dossier dist/ sur Vercel, Netlify ou servez-le via Django static
-```
-
-Définissez `VITE_API_URL=https://votre-backend.herokuapp.com/api` avant le build.
+1. Atlas : Network Access `0.0.0.0/0`, puis `python scripts/seed_data.py` en local.
+2. Render : service web dans `backend/`, variables `MONGODB_URI`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`.
+3. Vercel : projet dans `frontend/`, variable `VITE_API_URL=https://votre-api.onrender.com/api`.
 
 ## Gestion de projet Agile
 

@@ -278,6 +278,13 @@ class DeleteSubstitutionView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class HealthView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"status": "ok"})
+
+
 def _product_dict(product) -> dict:
     return {
         "barcode": product.barcode,

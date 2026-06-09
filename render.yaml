@@ -1,0 +1,28 @@
+# Blueprint Render — backend Django
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: pur-beurre-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn pur_beurre.wsgi --bind 0.0.0.0:$PORT --log-file -
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: DEBUG
+        value: "False"
+      - key: MONGODB_DB
+        value: pur_beurre
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

@@ -4,6 +4,7 @@ from api.views import (
     CategoriesView,
     CategoryProductsView,
     DeleteSubstitutionView,
+    HealthView,
     LoginView,
     MeView,
     MySubstitutionsView,
@@ -15,6 +16,7 @@ from api.views import (
 )
 
 urlpatterns = [
+    path("health/", HealthView.as_view(), name="health"),
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/login/", LoginView.as_view(), name="login"),
     path("auth/me/", MeView.as_view(), name="me"),
