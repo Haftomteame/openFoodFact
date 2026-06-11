@@ -102,7 +102,14 @@ export default function BrowseProducts() {
       });
       navigate("/result", { state: { result: res.data } });
     } catch (err) {
-      setError(err.response?.data?.error || "Aucun substitut trouvé.");
+      const apiError = err.response?.data?.error;
+      setError(
+        apiError
+        || (err.message?.includes("non-JSON")
+          ? "Backend inaccessible. Vérifiez que le serveur Django tourne sur le port 8080."
+          : null)
+        || "Aucun substitut trouvé.",
+      );
     } finally {
       setLoading(false);
     }
