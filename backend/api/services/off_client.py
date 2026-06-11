@@ -7,20 +7,31 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-PRODUCT_FIELDS = (
-    "code,product_name,brands,categories,categories_tags,"
-    "categories_tags_fr,nutrition_grades,nutriscore_grade,nova_group,"
-    "ecoscore_grade,ecoscore_score,"
-    "allergens_tags,ingredients_text_fr,ingredients_text,image_url,"
-    "image_front_url,stores,purchase_places,countries_tags,quantity,"
-    "product_quantity,url"
+LIST_FIELDS = (
+    "code,product_name,brands,categories,categories_tags,categories_tags_fr,"
+    "nutrition_grades,nutriscore_grade,nova_group,ecoscore_grade,"
+    "allergens_tags,image_front_url,image_url,stores,purchase_places,quantity,url"
 )
+
+DETAIL_FIELDS = (
+    f"{LIST_FIELDS},ingredients_text_fr,ingredients_text,ecoscore_score,"
+    "countries_tags,product_quantity"
+)
+
+_off_client: "OpenFoodFactsClient | None" = None
+
+
+def get_off_client() -> "OpenFoodFactsClient":
+    global _off_client
+    if _off_client is None:
+        _off_client = OpenFoodFactsClient()
+    return _off_client
 
 
 class OpenFoodFactsClient:
     """Télécharge les données depuis l'API Open Food Facts."""
 
-    def __init__(self, base_url: str | None = None, timeout: int = 20, max_retries: int = 3):
+    def __init__(self, base_url: str | None = None, timeout: int = 15, max_retries: int = 2):
         self.base_url = (base_url or settings.OFF_API_BASE_URL).rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
@@ -39,14 +50,14 @@ class OpenFoodFactsClient:
             try:
                 response = self.session.get(url, params=params, timeout=self.timeout)
                 if response.status_code in (429, 503) and attempt < self.max_retries - 1:
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(1.0 * (attempt + 1))
                     continue
                 response.raise_for_status()
                 return response.json()
             except requests.RequestException as exc:
                 last_error = exc
                 if attempt < self.max_retries - 1:
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(1.0 * (attempt + 1))
         raise last_error  # type: ignore[misc]
 
     def get_product_by_barcode(self, barcode: str) -> dict[str, Any] | None:
@@ -54,7 +65,7 @@ class OpenFoodFactsClient:
         if not barcode.isdigit() or len(barcode) < 8:
             return None
         try:
-            data = self._get(f"/api/v2/product/{barcode}", params={"fields": PRODUCT_FIELDS})
+            data = self._get(f"/api/v2/product/{barcode}", params={"fields": DETAIL_FIELDS})
             if data.get("status") == 1 and data.get("product"):
                 return data["product"]
         except requests.RequestException as exc:
@@ -76,7 +87,7 @@ class OpenFoodFactsClient:
                     "countries_tags": countries,
                     "page_size": page_size,
                     "page": page,
-                    "fields": PRODUCT_FIELDS,
+                    "fields": LIST_FIELDS,
                     "sort_by": "popularity_key",
                 },
             )
@@ -106,7 +117,7 @@ class OpenFoodFactsClient:
                     "json": 1,
                     "page_size": page_size,
                     "page": page,
-                    "fields": PRODUCT_FIELDS,
+                    "fields": LIST_FIELDS,
                     "countries": "France",
                 },
             )
@@ -131,7 +142,7 @@ class OpenFoodFactsClient:
                     "json": 1,
                     "page_size": page_size,
                     "countries_tags": countries,
-                    "fields": PRODUCT_FIELDS,
+                    "fields": LIST_FIELDS,
                 },
             )
             return data.get("products", [])
@@ -144,13 +155,15 @@ class OpenFoodFactsClient:
         category_tag: str,
         max_nutri_score: str,
         exclude_barcode: str | None = None,
-        limit: int = 50,
+        limit: int = 30,
     ) -> list[dict[str, Any]]:
         nutri_order = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}
         target = nutri_order.get(max_nutri_score.lower(), 5)
         better_grades = [g for g, v in nutri_order.items() if v < target]
 
         candidates: list[dict[str, Any]] = []
+        page_size = min(limit, 20)
+
         for grade in better_grades:
             try:
                 data = self._get(
@@ -159,8 +172,8 @@ class OpenFoodFactsClient:
                         "categories_tags": category_tag,
                         "nutrition_grades_tags": grade,
                         "countries_tags": "france",
-                        "page_size": min(limit, 20),
-                        "fields": PRODUCT_FIELDS,
+                        "page_size": page_size,
+                        "fields": LIST_FIELDS,
                         "sort_by": "popularity_key",
                     },
                 )
@@ -168,9 +181,12 @@ class OpenFoodFactsClient:
             except requests.RequestException:
                 continue
 
+            if len(candidates) >= limit:
+                break
+
         if exclude_barcode:
             candidates = [p for p in candidates if p.get("code") != exclude_barcode]
-        return candidates
+        return candidates[:limit]
 
     def get_popular_categories(self) -> list[dict[str, str]]:
         return [

@@ -15,12 +15,14 @@ from api.serializers import (
     SubstituteRequestSerializer,
     UserAllergensSerializer,
 )
+from django.conf import settings
+
 from api.services import (
     DataCleaner,
-    OpenFoodFactsClient,
     ProductRepository,
     SubstituteFinder,
 )
+from api.services.off_client import get_off_client
 
 
 class RegisterView(APIView):
@@ -108,7 +110,7 @@ class CategoriesView(APIView):
         repo = ProductRepository()
         categories = repo.list_categories()
         if not categories:
-            off = OpenFoodFactsClient()
+            off = get_off_client()
             repo.seed_categories(off.get_popular_categories())
             categories = repo.list_categories()
 
@@ -130,16 +132,29 @@ class CategoryProductsView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        off = OpenFoodFactsClient()
         repo = ProductRepository()
 
         category_tag = data["category_tag"]
         page_size = data.get("page_size", 24)
+        page = data.get("page", 1)
 
+        if page == 1:
+            cached = repo.get_fresh_products_by_category(category_tag, limit=page_size)
+            if len(cached) >= settings.CATEGORY_CACHE_MIN_PRODUCTS:
+                return Response(
+                    {
+                        "category_tag": category_tag,
+                        "count": len(cached),
+                        "products": [_product_response(p) for p in cached],
+                        "cached": True,
+                    }
+                )
+
+        off = get_off_client()
         raw_products = off.search_products_by_category(
             category_tag=category_tag,
             page_size=page_size,
-            page=data.get("page", 1),
+            page=page,
         )
         products = repo.cache_products_from_raw(raw_products, category_tag=category_tag)
 
@@ -148,6 +163,7 @@ class CategoryProductsView(APIView):
                 "category_tag": category_tag,
                 "count": len(products),
                 "products": [_product_response(p) for p in products],
+                "cached": False,
             }
         )
 
@@ -158,20 +174,31 @@ class SearchProductsView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        off = OpenFoodFactsClient()
         repo = ProductRepository()
+        page_size = data.get("page_size", 24)
+        query = data["q"]
 
-        raw_products = off.search_products_by_name(
-            query=data["q"],
-            page_size=data.get("page_size", 24),
-        )
+        local_products = repo.search_products_local(query, limit=page_size)
+        if len(local_products) >= max(page_size // 2, 8):
+            return Response(
+                {
+                    "query": query,
+                    "count": len(local_products),
+                    "products": [_product_response(p) for p in local_products],
+                    "cached": True,
+                }
+            )
+
+        off = get_off_client()
+        raw_products = off.search_products_by_name(query=query, page_size=page_size)
         products = repo.cache_products_from_raw(raw_products)
 
         return Response(
             {
-                "query": data["q"],
+                "query": query,
                 "count": len(products),
                 "products": [_product_response(p) for p in products],
+                "cached": False,
             }
         )
 
@@ -186,7 +213,7 @@ class ProductByBarcodeView(APIView):
         product = repo.get_product_by_barcode(barcode)
 
         if not product:
-            off = OpenFoodFactsClient()
+            off = get_off_client()
             raw = off.get_product_by_barcode(barcode)
             if not raw:
                 return Response(

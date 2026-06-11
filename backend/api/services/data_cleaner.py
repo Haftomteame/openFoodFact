@@ -51,7 +51,6 @@ class DataCleaner:
             "stores": stores,
             "countries": countries,
             "quantity": cls._clean_text(raw.get("quantity") or raw.get("product_quantity") or ""),
-            "raw_data": raw,
         }
 
     @classmethod
