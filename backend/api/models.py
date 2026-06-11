@@ -61,7 +61,14 @@ class ProductCache(Document):
 
     meta = {
         "collection": "products_cache",
-        "indexes": ["barcode", "category_tag", "name", "nutri_score"],
+        "indexes": [
+            "barcode",
+            "category_tag",
+            "name",
+            "nutri_score",
+            ("category_tag", "nutri_score"),
+            ("category_tag", "-updated_at"),
+        ],
     }
 
 

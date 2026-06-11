@@ -1,8 +1,10 @@
 from typing import Any
 
+from django.conf import settings
+
 from api.allergens import product_has_allergens
 from api.services.data_cleaner import DataCleaner
-from api.services.off_client import OpenFoodFactsClient
+from api.services.off_client import OpenFoodFactsClient, get_off_client
 from api.services.repository import ProductRepository
 
 NUTRI_RANK = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5}
@@ -16,7 +18,7 @@ class SubstituteFinder:
         off_client: OpenFoodFactsClient | None = None,
         repository: ProductRepository | None = None,
     ):
-        self.off_client = off_client or OpenFoodFactsClient()
+        self.off_client = off_client or get_off_client()
         self.repository = repository or ProductRepository()
 
     def find_substitute(
@@ -38,25 +40,45 @@ class SubstituteFinder:
                 "original": original,
             }
 
-        candidates_raw = self.off_client.find_better_in_category(
+        max_nutri = original.get("nutri_score") or "E"
+        exclude_barcode = original.get("barcode")
+
+        local_products = self.repository.find_better_in_category_local(
             category_tag=category_tag,
-            max_nutri_score=original.get("nutri_score") or "E",
-            exclude_barcode=original.get("barcode"),
+            max_nutri_score=max_nutri,
+            exclude_barcode=exclude_barcode,
         )
+        min_local = settings.SUBSTITUTE_LOCAL_MIN_CANDIDATES
 
-        if not candidates_raw:
-            candidates_raw = self.off_client.search_products_by_category(
-                category_tag=category_tag,
-                page_size=30,
-            )
-            candidates_raw = [
-                p
-                for p in candidates_raw
-                if p.get("code") != original.get("barcode")
+        if len(local_products) >= min_local:
+            cleaned_candidates = [
+                self.repository.product_to_dict(product) for product in local_products
             ]
+        else:
+            candidates_raw = self.off_client.find_better_in_category(
+                category_tag=category_tag,
+                max_nutri_score=max_nutri,
+                exclude_barcode=exclude_barcode,
+            )
 
-        cleaned_candidates = [DataCleaner.clean_product(p) for p in candidates_raw]
-        cleaned_candidates = [c for c in cleaned_candidates if c["barcode"]]
+            if not candidates_raw:
+                candidates_raw = self.off_client.search_products_by_category(
+                    category_tag=category_tag,
+                    page_size=30,
+                )
+                candidates_raw = [
+                    p for p in candidates_raw if p.get("code") != exclude_barcode
+                ]
+
+            cleaned_candidates = [DataCleaner.clean_product(p) for p in candidates_raw]
+            cleaned_candidates = [c for c in cleaned_candidates if c["barcode"]]
+
+            if local_products:
+                seen = {c["barcode"] for c in cleaned_candidates}
+                for product in local_products:
+                    if product.barcode not in seen:
+                        cleaned_candidates.append(self.repository.product_to_dict(product))
+                        seen.add(product.barcode)
 
         forbidden_keys = list(user_allergens or [])
         if avoid_allergens and forbidden_keys:
@@ -98,8 +120,7 @@ class SubstituteFinder:
             if len(alternatives) >= 2:
                 break
 
-        for product in [original, substitute, *top_candidates]:
-            self.repository.upsert_product(product)
+        self.repository.upsert_products_bulk([original, substitute, *top_candidates])
 
         reason = self._build_reason(original, substitute, forbidden_keys if avoid_allergens else [])
 
@@ -132,7 +153,7 @@ class SubstituteFinder:
 
         cached = self.repository.get_product_by_barcode(barcode)
         if cached:
-            return self._product_to_dict(cached)
+            return self.repository.product_to_dict(cached)
 
         raw = self.off_client.get_product_by_barcode(barcode)
         if raw:

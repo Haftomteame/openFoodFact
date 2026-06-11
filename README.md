@@ -36,7 +36,7 @@ frontend/              → Interface React (Vite)
 
 - Python 3.11+
 - Node.js 18+
-- MongoDB (local via Docker ou [MongoDB Atlas](https://www.mongodb.com/atlas))
+- MongoDB : [MongoDB Atlas](https://www.mongodb.com/atlas) (recommandé) ou Docker local
 
 ## Lancer l'app en une seule commande
 
@@ -48,6 +48,7 @@ python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
+# Éditez .env : MONGODB_URI Atlas (voir section ci-dessous) ou local
 cd ..
 npm run install:all
 npm run seed
@@ -68,16 +69,29 @@ Ou :
 - Frontend : http://localhost:5173  
 - Backend : http://127.0.0.1:8080/api/ (port 8080 : le 8000 est souvent bloqué sous Windows)
 
-MongoDB doit tourner (`docker compose up -d` ou Atlas configuré dans `backend/.env`).
+MongoDB : **Atlas** (recommandé, voir ci-dessous) ou local (`docker compose up -d`).
 
 ---
 
 ## Installation rapide (détaillée)
 
-### 1. MongoDB (local)
+### 1. MongoDB
+
+**Option A — MongoDB Atlas (recommandé)**
+
+Voir la section [Configuration MongoDB Atlas](#configuration-mongodb-atlas) ci-dessous.
+
+**Option B — MongoDB local (Docker)**
 
 ```bash
 docker compose up -d
+```
+
+Puis dans `backend/.env` :
+
+```
+MONGODB_URI=mongodb://localhost:27017/pur_beurre
+MONGODB_DB=pur_beurre
 ```
 
 ### 2. Backend Django
@@ -115,17 +129,75 @@ Interface sur : http://localhost:5173
 
 ## Configuration MongoDB Atlas
 
-1. Créez un cluster sur [Mloud.mongodb.com)
-2. Ajoutez vos collègues avec des rôles différenciés :
-   - **Owner** : administrateur du projet
-   - **Read Only** : consultation uniquement
-   - **Read and write to any database** : développement
-3. Copiez l'URI de connexion dans `backend/.env` :
+### 1. Créer le cluster
+
+1. Connectez-vous sur [MongoDB Atlas](https://cloud.mongodb.com).
+2. Créez un cluster (gratuit M0 suffit pour le développement).
+3. Créez la base `pur_beurre` (ou laissez-la se créer automatiquement au premier seed).
+
+### 2. Utilisateur de base de données
+
+Dans **Database Access** → **Add New Database User** :
+
+- Créez un utilisateur avec mot de passe (notez-le).
+- Rôle recommandé en dev : **Read and write to any database**.
+
+Pour le travail en équipe, vous pouvez inviter vos collègues avec des rôles différenciés :
+
+| Rôle Atlas | Usage |
+|---|---|
+| **Owner** | Administrateur du projet |
+| **Read Only** | Consultation uniquement |
+| **Read and write to any database** | Développement |
+
+### 3. Accès réseau
+
+Dans **Network Access** → **Add IP Address** :
+
+- **Add Current IP Address** pour le développement local.
+- **Allow Access from Anywhere** (`0.0.0.0/0`) si vous déployez sur Render/Vercel (voir [DEPLOYMENT.md](./DEPLOYMENT.md)).
+
+### 4. URI de connexion
+
+Dans **Database** → **Connect** → **Drivers** → **Python**, copiez l'URI :
 
 ```
+mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+```
+
+Remplacez `<user>` et `<password>` par vos identifiants. Si le mot de passe contient des caractères spéciaux (`@`, `#`, `%`…), encodez-les en URL (ex. `@` → `%40`).
+
+### 5. Fichier `backend/.env`
+
+Éditez `backend/.env` (ne jamais le committer) :
+
+```env
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/pur_beurre?retryWrites=true&w=majority
 MONGODB_DB=pur_beurre
 ```
+
+Le nom de base `pur_beurre` doit figurer dans l'URI (avant le `?`).
+
+### 6. Peupler la base (seed)
+
+Atlas est vide au départ. Depuis `backend/` avec le venv activé :
+
+```powershell
+python manage.py check
+python scripts/seed_data.py
+```
+
+Cela crée les collections : `users`, `categories`, `products_cache`, `substitutions`.
+
+Vérifiez dans Atlas → **Browse Collections** que la base `pur_beurre` contient bien les données.
+
+### 7. Lancer l'application
+
+```powershell
+npm run dev
+```
+
+Plus besoin de Docker MongoDB si vous utilisez Atlas. En cas d'erreur de connexion, vérifiez l'IP autorisée, l'utilisateur/mot de passe et l'encodage du mot de passe dans l'URI.
 
 ## Endpoints API
 
