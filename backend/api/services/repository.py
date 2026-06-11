@@ -119,6 +119,17 @@ class ProductRepository:
     def list_categories(self) -> list[Category]:
         return list(Category.objects.order_by("name_fr"))
 
+    def get_substitution_for_product(
+        self,
+        user_id: str,
+        original_barcode: str,
+    ) -> Substitution | None:
+        return (
+            Substitution.objects(user_id=user_id, original_barcode=original_barcode)
+            .order_by("-saved_at")
+            .first()
+        )
+
     def save_substitution(
         self,
         user_id: str,
@@ -126,6 +137,21 @@ class ProductRepository:
         substitute: dict[str, Any],
         reason: str,
     ) -> Substitution:
+        existing = self.get_substitution_for_product(user_id, original["barcode"])
+        if existing:
+            existing.original_name = original["name"]
+            existing.original_nutri_score = original.get("nutri_score")
+            existing.substitute_barcode = substitute["barcode"]
+            existing.substitute_name = substitute["name"]
+            existing.substitute_description = substitute.get("description", "")
+            existing.substitute_stores = substitute.get("stores", [])
+            existing.substitute_off_url = substitute.get("off_url", "")
+            existing.substitute_nutri_score = substitute.get("nutri_score")
+            existing.reason = reason
+            existing.saved_at = datetime.utcnow()
+            existing.save()
+            return existing
+
         return Substitution(
             user_id=user_id,
             original_barcode=original["barcode"],

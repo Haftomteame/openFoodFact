@@ -14,7 +14,8 @@ export default function SubstituteResult() {
   const { allergens } = useAllergy();
   const initialResult = location.state?.result;
   const [result, setResult] = useState(initialResult);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(!!initialResult?.saved);
+  const [pickedAlternative, setPickedAlternative] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -61,6 +62,7 @@ export default function SubstituteResult() {
             : null,
       },
     }));
+    setPickedAlternative(true);
     setSaved(false);
   };
 
@@ -76,6 +78,12 @@ export default function SubstituteResult() {
       <p style={{ color: "var(--muted)", marginBottom: "1rem", fontSize: "0.95rem" }}>
         {reason}
       </p>
+
+      {saved && user && (
+        <p className="allergy-safe-banner">
+          ✓ Substitut enregistré automatiquement dans « Mes substituts ».
+        </p>
+      )}
 
       {result.allergy_safe && (
         <p className="allergy-safe-banner">
@@ -156,7 +164,13 @@ export default function SubstituteResult() {
               onClick={handleSave}
               disabled={saved || saving}
             >
-              {saved ? "✓ Enregistré" : saving ? "Enregistrement…" : "Enregistrer ce substitut"}
+              {saved
+                ? "✓ Enregistré"
+                : saving
+                  ? "Enregistrement…"
+                  : pickedAlternative
+                    ? "Enregistrer cette alternative"
+                    : "Enregistrer ce substitut"}
             </button>
             <Link to="/substitutions" className="btn btn-secondary" style={{ textDecoration: "none" }}>
               Mes substituts

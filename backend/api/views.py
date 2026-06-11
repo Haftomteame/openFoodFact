@@ -251,6 +251,24 @@ class SubstituteView(APIView):
 
         if not result.get("success"):
             return Response(result, status=status.HTTP_404_NOT_FOUND)
+
+        if (
+            hasattr(request, "user")
+            and request.user
+            and getattr(request.user, "is_authenticated", False)
+            and not getattr(request.user, "is_anonymous", True)
+        ):
+            sub = _persist_substitution(
+                request.user,
+                result["original"]["barcode"],
+                result["substitute"]["barcode"],
+                reason=result.get("reason", ""),
+                substitute_payload=result["substitute"],
+            )
+            if sub:
+                result["saved"] = True
+                result["substitution_id"] = str(sub.id)
+
         return Response(result)
 
 
@@ -262,36 +280,17 @@ class SaveSubstitutionView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        repo = ProductRepository()
-        original = repo.get_product_by_barcode(data["original_barcode"])
-        substitute = repo.get_product_by_barcode(data["substitute_barcode"])
-
-        if not original or not substitute:
+        sub = _persist_substitution(
+            request.user,
+            data["original_barcode"],
+            data["substitute_barcode"],
+            reason=data.get("reason", ""),
+        )
+        if not sub:
             return Response(
                 {"error": "Produit original ou substitut introuvable en base."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        finder = SubstituteFinder()
-        user_allergens = getattr(request.user, "allergens", None) or []
-        reason = data.get("reason") or finder._build_reason(
-            _product_dict(original),
-            _product_dict(substitute),
-            user_allergens,
-        )
-
-        sub = repo.save_substitution(
-            user_id=str(request.user.id),
-            original=_product_dict(original),
-            substitute={
-                **_product_dict(substitute),
-                "description": finder._build_description(
-                    _product_dict(substitute),
-                    _product_dict(original),
-                ),
-            },
-            reason=reason,
-        )
 
         return Response(_substitution_response(sub), status=status.HTTP_201_CREATED)
 
@@ -324,6 +323,43 @@ class HealthView(APIView):
 
     def get(self, request):
         return Response({"status": "ok"})
+
+
+def _persist_substitution(
+    user,
+    original_barcode: str,
+    substitute_barcode: str,
+    reason: str = "",
+    substitute_payload: dict | None = None,
+):
+    repo = ProductRepository()
+    original = repo.get_product_by_barcode(original_barcode)
+    substitute = repo.get_product_by_barcode(substitute_barcode)
+
+    if not original or not substitute:
+        return None
+
+    original_dict = _product_dict(original)
+    substitute_dict = _product_dict(substitute)
+    finder = SubstituteFinder()
+    user_allergens = getattr(user, "allergens", None) or []
+    final_reason = reason or finder._build_reason(
+        original_dict,
+        substitute_dict,
+        user_allergens,
+    )
+
+    return repo.save_substitution(
+        user_id=str(user.id),
+        original=original_dict,
+        substitute={
+            **substitute_dict,
+            "description": substitute_payload.get("description")
+            if substitute_payload
+            else finder._build_description(substitute_dict, original_dict),
+        },
+        reason=final_reason,
+    )
 
 
 def _user_response(user) -> dict:

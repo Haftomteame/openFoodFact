@@ -80,15 +80,23 @@ class SubstituteFinder:
                         cleaned_candidates.append(self.repository.product_to_dict(product))
                         seen.add(product.barcode)
 
+        if len(cleaned_candidates) < min_local:
+            seen = {c["barcode"] for c in cleaned_candidates}
+            for product in self.repository.get_products_by_category(category_tag, limit=30):
+                if product.barcode == exclude_barcode or product.barcode in seen:
+                    continue
+                cleaned_candidates.append(self.repository.product_to_dict(product))
+                seen.add(product.barcode)
+
         forbidden_keys = list(user_allergens or [])
         if avoid_allergens and forbidden_keys:
-            filtered = [
+            safe_candidates = [
                 c
                 for c in cleaned_candidates
                 if not product_has_allergens(c.get("allergens", []), forbidden_keys)
             ]
-            if filtered:
-                cleaned_candidates = filtered
+            if safe_candidates:
+                cleaned_candidates = safe_candidates
 
         substitute = self._pick_best(cleaned_candidates, original)
         if not substitute:
