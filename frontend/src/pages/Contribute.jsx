@@ -24,7 +24,7 @@ export default function Contribute() {
       <div className="contribute-hero card">
         <h1>Contribuer à Open Food Facts</h1>
         <p>
-          Pur Beurre s'appuie sur les données ouvertes de la communauté. Vous aussi, aidez à
+          FoodFacts Hub s'appuie sur les données ouvertes de la communauté. Vous aussi, aidez à
           rendre l'alimentation plus transparente pour tous.
         </p>
         <div className="contribute-actions">

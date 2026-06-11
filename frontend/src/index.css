@@ -87,8 +87,8 @@ button, input, select { font: inherit; }
   font-weight: 700;
   line-height: 1;
 }
-.logo-wordmark .open { color: #333; font-weight: 400; }
-.logo-wordmark .food {
+.logo-wordmark .food { color: #333; font-weight: 600; }
+.logo-wordmark .facts {
   background: var(--off-orange);
   color: white;
   padding: 0.1rem 0.35rem;
@@ -96,7 +96,7 @@ button, input, select { font: inherit; }
   font-weight: 700;
   font-size: 0.95rem;
 }
-.logo-wordmark .facts { color: #333; font-weight: 400; }
+.logo-wordmark .hub { color: #333; font-weight: 600; }
 
 .header-search-wrap {
   flex: 1;
