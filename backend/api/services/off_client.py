@@ -38,7 +38,7 @@ class OpenFoodFactsClient:
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "User-Agent": "PurBeurre-Ratatouille/1.0 (IPSSI - Open Food Facts Project)",
+                "User-Agent": "FoodFactsHub/1.0 (IPSSI - Open Food Facts Project)",
                 "Accept": "application/json",
             }
         )

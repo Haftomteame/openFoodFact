@@ -1,8 +1,8 @@
-# Pur Beurre — Ratatouille
+# FoodFacts Hub
 
 WebApp Django + React pour trouver des **substituts alimentaires plus sains** grâce à l'API [Open Food Facts](https://world.openfoodfacts.org).
 
-Projet réalisé dans le cadre du module Open Data — startup **Pur Beurre** (IPSSI).
+Projet réalisé dans le cadre du module Open Data (IPSSI).
 
 ## Fonctionnalités
 

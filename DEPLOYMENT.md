@@ -1,4 +1,4 @@
-# Déployer Pur Beurre — accessible partout
+# Déployer FoodFacts Hub — accessible partout
 
 Stack recommandée (gratuite) :
 
